@@ -1,0 +1,346 @@
+
+
+namespace BatchProcess
+{
+    public sealed class GenerateExport : BatchProcess.IBatchProcess
+    {
+        #region Specific fields (free)
+
+        private int _processCount = 0;
+        private int _processCountFiles = 0;
+        private int _processCountLines = 0;
+        private char _spacer = ';';
+        private string _inputRootFolder = "";
+        private string _outputFile = "";
+        private bool _hasConsole = false;
+        private string _outputFileErrors = "";
+        System.Collections.Generic.List<string> _list = null;
+
+        System.IO.StreamWriter _streamWriter = null;
+        FeatureInfo _featureInfo = null;
+
+        #endregion
+
+        #region Required Constructor - receives all the necessary parms (free)
+        public GenerateExport(string RootFolder, string OutputFile, bool hasConsole)
+        {
+            _inputRootFolder = (RootFolder == null) ? "" : RootFolder.Trim();
+            _outputFile = (OutputFile == null) ? "" : OutputFile.Trim();
+            _hasConsole = hasConsole;
+            _outputFileErrors = "_className" + "_Errors.txt";
+
+        }
+
+        #endregion
+
+        #region Required Method - Start - (do not change anything)
+        public void Start()
+        {
+            Processing();
+        }
+
+        private CucumberFeaturesExport.BatchMessage _callbackBatchMessage;
+        public void Start(CucumberFeaturesExport.BatchMessage callbackBatchMessage)
+        {
+            _callbackBatchMessage = callbackBatchMessage;
+            Processing();
+        }
+        #endregion
+
+        #region Required Method - ValidateAllInputs - returns a value for each parameter invalid (free)
+        public int ValidateAllInputs()
+        {
+            //return 0; //no test
+
+            if (_inputRootFolder == "")
+                return 1;
+
+            if (!System.IO.Directory.Exists(_inputRootFolder))
+                return 1;
+
+            if ((_outputFile == "") || (!_outputFile.ToLower().EndsWith(".csv")))
+                return 2;
+
+            return 0;
+        }
+
+        #endregion
+
+        #region Required Method - Processing - (free content)
+
+        private void Processing()
+        {
+            _list = new System.Collections.Generic.List<string>();
+
+            MountListFiles();
+            SortList();
+            ProcessListFiles();
+        }
+
+        #endregion
+
+        #region Free Section Methods - Called by Processing - (free content)
+        private void MountListFiles()
+        {
+            _processCount = 0;
+            DirSearch(_inputRootFolder);
+        }
+
+        private void DirSearch(string startDirectory)
+        {
+            try
+            {
+                foreach (string dirItem in System.IO.Directory.GetDirectories(startDirectory))
+                {
+                    foreach (string fileItem in System.IO.Directory.GetFiles(dirItem))
+                    {
+                        _processCount++;
+                        ReportProgress("Mount:" + _processCount);
+
+                        //System.Console.WriteLine(fileItem);
+                        if (fileItem.ToLower().EndsWith(".feature"))
+                            _list.Add(fileItem);
+                    }
+
+                    DirSearch(dirItem);
+                }
+            }
+            catch (System.Exception excpt)
+            {
+                System.Console.WriteLine(excpt.Message);
+            }
+        }
+
+        private void SortList()
+        {
+            _list.Sort();
+        }
+
+        private void ProcessListFiles()
+        {
+            _processCount = 0;
+            _processCountFiles = 0;
+            _processCountLines = 0;
+
+            try
+            {
+                System.IO.FileStream fileStreamW = new System.IO.FileStream(_outputFile, System.IO.FileMode.Create, System.IO.FileAccess.Write);
+                _streamWriter = new System.IO.StreamWriter(fileStreamW, System.Text.Encoding.UTF8);
+
+                //write header
+                _streamWriter.Write("NumLinha" + _spacer);
+                _streamWriter.Write("Func_Tags" + _spacer);
+                _streamWriter.Write("Funcionalidade" + _spacer);
+                _streamWriter.Write("Cenario_Tags" + _spacer);
+                _streamWriter.Write("Tipo_Cenário" + _spacer);
+                _streamWriter.Write("Cenário" + _spacer);
+                _streamWriter.Write("Codigo" + _spacer);
+                _streamWriter.Write("Frase");
+                _streamWriter.WriteLine("");
+                _streamWriter.Flush();
+
+                _featureInfo = new FeatureInfo();
+
+                foreach (string fileName in _list)
+                {
+                    _processCountFiles++;
+                    ProcessSingleFile(fileName);
+                }
+
+                _streamWriter.Flush();
+                _streamWriter.Close();
+                fileStreamW.Close();
+
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine("ERROR:" + ex.Message);
+            }
+
+        }
+
+        private void ProcessSingleFile(string fileName)
+        {
+            try
+            {
+                _featureInfo.Clear();
+
+                System.IO.FileStream fileStreamR = new System.IO.FileStream(fileName, System.IO.FileMode.Open, System.IO.FileAccess.Read);
+                System.IO.StreamReader streamReader = new System.IO.StreamReader(fileStreamR, System.Text.Encoding.UTF8);
+
+                string line;
+                while ((line = streamReader.ReadLine()) != null)
+                {
+                    ProcessSingleLine(line);
+
+                    _processCount++;
+                    ReportProgress("Process File:" + _processCountFiles + ":" + _processCount);
+                }
+
+                streamReader.Close();
+                fileStreamR.Close();
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine("ERROR:" + ex.Message);
+                //ex.printStackTrace();
+            }
+
+        }
+
+        private void ProcessSingleLine(string line)
+        {
+            string temp = line.Replace("\t", "").Trim();
+
+            if ((temp.StartsWith("#") || temp.StartsWith("|") || temp.Length == 0))
+                return;
+
+            if (temp.StartsWith("@"))
+            {
+                if (_featureInfo.Feature == null)
+                    _featureInfo.TagsFeature = temp;
+                else
+                    _featureInfo.TagsScenario = temp;
+
+                return;
+            }
+
+            if (temp.StartsWith("Funcionalidade:") || temp.StartsWith("Característica:") || temp.StartsWith("Caracteristica:"))
+            {
+                _featureInfo.Feature = temp;
+                return;
+            }
+
+            if (temp.StartsWith("Contexto:") || temp.StartsWith("Cenário de Fundo:") || temp.StartsWith("Cenario de Fundo:") || temp.StartsWith("Fundo:"))
+            {
+                _featureInfo.Background = temp;
+                _featureInfo.Scenario = null;
+                _featureInfo.Scenario_outline = null;
+                return;
+            }
+
+            if (temp.StartsWith("Cenário:") || temp.StartsWith("Cenario:"))
+            {
+                _featureInfo.Background = null;
+                _featureInfo.Scenario = temp;
+                _featureInfo.Scenario_outline = null;
+                return;
+            }
+
+            if (temp.StartsWith("Esquema do Cenário:") || temp.StartsWith("Esquema do Cenario:") || temp.StartsWith("Delineação do Cenário") || temp.StartsWith("Delineacao do Cenario"))
+            {
+                _featureInfo.Background = null;
+                _featureInfo.Scenario = null;
+                _featureInfo.Scenario_outline = temp;
+                return;
+            }
+
+            if (temp.StartsWith("Exemplos:") || temp.StartsWith("Cenários:") || temp.StartsWith("Cenarios:"))
+            {
+                _featureInfo.Examples = temp;
+                return;
+            }
+
+            if (temp.StartsWith("Dado ") || temp.StartsWith("Dada ") || temp.StartsWith("Dados ") || temp.StartsWith("Dadas "))
+            {
+                _featureInfo.Given = temp;
+            }
+
+            if (temp.StartsWith("Quando "))
+            {
+                _featureInfo.When = temp;
+            }
+
+            if (temp.StartsWith("Então ") || temp.StartsWith("Entao "))
+            {
+                _featureInfo.Then = temp;
+            }
+
+            if (temp.StartsWith("E "))
+            {
+                _featureInfo.And = temp;
+            }
+
+            if (temp.StartsWith("Mas "))
+            {
+                _featureInfo.But = temp;
+            }
+
+            //write
+            if ((_featureInfo.Background != null) || (_featureInfo.Scenario != null) || (_featureInfo.Scenario_outline != null))
+            {
+                int pos = temp.IndexOf(" ");
+                if (pos > 0)
+                {
+                    _processCountLines++;
+                    System.Threading.Thread.Sleep(5);
+
+                    //ini
+                    string keyWord = temp.Substring(0, pos);
+                    string phrase = temp.Substring(pos).Trim();
+
+                    WriteColumn(_processCountLines.ToString(), true);
+                    WriteColumn(_featureInfo.TagsFeature, true);
+                    WriteColumn(_featureInfo.Feature, true);
+                    WriteColumn(_featureInfo.TagsScenario, true);
+
+                    ///// three otions for same colum n//////////
+                    if (_featureInfo.Background != null)
+                    {
+                        WriteColumn("Fundo", true);
+                        WriteColumn(_featureInfo.Background, true);
+                    }
+
+                    if (_featureInfo.Scenario != null)
+                    {
+                        WriteColumn("Cenario", true);
+                        WriteColumn(_featureInfo.Scenario, true);
+                    }
+
+                    if (_featureInfo.Scenario_outline != null)
+                    {
+                        WriteColumn("Esquema de Cenario", true);
+                        WriteColumn(_featureInfo.Scenario_outline, true);
+                    }
+
+                    WriteColumn(keyWord, true);
+                    WriteColumn(phrase, false);
+
+                    _streamWriter.WriteLine("");
+                    _streamWriter.Flush();
+                    //end
+                }
+            }
+        }
+        private void WriteColumn(string text, bool spacer)
+        {
+            string textTemp = "";
+
+            if (text != null)
+                textTemp = text.Replace(";", "<?>");
+
+            _streamWriter.Write(textTemp);
+
+            if (spacer)
+                _streamWriter.Write(_spacer);
+        }
+
+        #endregion
+
+        #region ReportProgress - Required method (do not change anything)
+        private void ReportProgress(string message)
+        {
+            if (_hasConsole)
+            {
+                System.Console.WriteLine(message);
+            }
+            else
+            {
+                this._callbackBatchMessage(message);
+            }
+        }
+
+        #endregion
+    }
+}
+

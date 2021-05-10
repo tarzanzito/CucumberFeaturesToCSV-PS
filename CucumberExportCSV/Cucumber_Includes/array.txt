@@ -1,0 +1,36 @@
+       Function MountListFiles()
+        {
+        
+        $res = @()
+$res += "aaa"
+$res += "bbb"
+$countries = $res[1]
+        
+        
+            $list = Get-ChildItem -Path "E:\MyBackups" –Recurse -Filter *.pbd | Select Name, FullName | sort FullName
+            
+            #####################
+            
+            #https://pwrshell.net/back-to-basics-arrays/
+            
+            $Array = New-Object System.Collections.ArrayList
+            $Array.add(1)
+            $Array.add(2)
+            $Array.add(3)
+            $Array.add("Hourray!")
+            
+            $Array | Get-Member
+            
+            #######################
+            
+            $Array | ForEach-Object { $_ }
+            
+            #####################
+            
+            $array -contains "Hourray!"
+            
+            ################
+            
+            $Array -is [system.array]
+            
+        }

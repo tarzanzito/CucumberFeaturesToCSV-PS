@@ -1,0 +1,26 @@
+Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -recurse |
+Get-ItemProperty -name Version,Release -EA 0 |
+Where { $_.PSChildName -match '^(?!S)\p{L}'} |
+Select PSChildName, Version, Release
+
+
+
+
+
+
+##Add-Type -AssemblyName System.Windows.Forms
+#Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full\' | Get-ItemPropertyValue -Name Release | Foreach-Object { $_ -ge 394802 }
+
+#Add-Type -path "c:\path\to\assembly.dll"
+
+
+Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full\' #| Get-ItemPropertyValue -Name Release, Version # | Foreach-Object { $_ -ge 394802 } 
+
+
+#get 
+$dotNetVersion = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full\" | Get-ItemPropertyValue -Name Version | Select-Object -first 1
+
+C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2
+
+
+$aa = "System.Windows.Forms, Version=$dotNetVersion, Culture=neutral"
